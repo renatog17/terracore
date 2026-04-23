@@ -1,16 +1,24 @@
 package com.nhs.ecs.systems;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.nhs.ecs.EntityManager;
+import com.nhs.ecs.components.AnimationComponent;
+import com.nhs.ecs.components.DirectionComponent;
 import com.nhs.ecs.components.PositionComponent;
+import com.nhs.ecs.components.SizeComponent;
 import com.nhs.ecs.components.TextureComponent;
+import com.nhs.ecs.components.VelocityComponent;
 
 public class RenderSystem {
 
     private EntityManager em;
     private SpriteBatch batch;
     private OrthographicCamera camera;
+
+    private static final float DEFAULT_SIZE = 32f;
 
     public RenderSystem(EntityManager em, SpriteBatch batch, OrthographicCamera camera) {
         this.em = em;
@@ -20,22 +28,81 @@ public class RenderSystem {
 
     public void render() {
 
-        // garante que usa a câmera correta
         batch.setProjectionMatrix(camera.combined);
-
         batch.begin();
+
+        float delta = Gdx.graphics.getDeltaTime();
 
         for (int id : em.getAllEntities()) {
 
-            if (em.hasComponent(id, PositionComponent.class) &&
-                em.hasComponent(id, TextureComponent.class)) {
+            PositionComponent pos = em.getComponent(id, PositionComponent.class);
+            if (pos == null) continue;
 
-                PositionComponent pos = em.getComponent(id, PositionComponent.class);
+            SizeComponent size = em.getComponent(id, SizeComponent.class);
+
+            float hitboxW = (size != null) ? size.width : DEFAULT_SIZE;
+            float hitboxH = (size != null) ? size.height : DEFAULT_SIZE;
+
+            // ===== ANIMAÇÃO =====
+            if (em.hasComponent(id, AnimationComponent.class)) {
+
+                AnimationComponent anim = em.getComponent(id, AnimationComponent.class);
+                VelocityComponent vel = em.getComponent(id, VelocityComponent.class);
+
+                anim.stateTime += delta;
+
+                boolean moving = vel != null && (vel.vx != 0 || vel.vy != 0);
+
+                TextureRegion frame;
+
+                if (moving) {
+                    int frameIndex = 1 + (int)(anim.stateTime / anim.frameTime) % 2;
+                    frame = anim.frames[frameIndex];
+                } else {
+                    frame = anim.frames[0];
+                }
+
+                float spriteW = frame.getRegionWidth();
+                float spriteH = frame.getRegionHeight();
+
+                float scale = hitboxH / spriteH;
+
+                float drawW = spriteW * scale;
+                float drawH = spriteH * scale;
+
+                float drawX = pos.x + (hitboxW - drawW) / 2f;
+                float drawY = pos.y;
+
+                // ===== DIREÇÃO (CORRIGIDO: usa DirectionComponent) =====
+                DirectionComponent dir = em.getComponent(id, DirectionComponent.class);
+
+                boolean flipX = dir != null && !dir.facingRight;
+
+                if (flipX) {
+                    batch.draw(
+                        frame,
+                        drawX + drawW,
+                        drawY,
+                        -drawW,
+                        drawH
+                    );
+                } else {
+                    batch.draw(
+                        frame,
+                        drawX,
+                        drawY,
+                        drawW,
+                        drawH
+                    );
+                }
+
+                continue;
+            }
+
+            // ===== TEXTURA NORMAL =====
+            if (em.hasComponent(id, TextureComponent.class)) {
                 TextureComponent tex = em.getComponent(id, TextureComponent.class);
-
-                if (pos == null || tex == null) continue;
-
-                batch.draw(tex.texture, pos.x, pos.y);
+                batch.draw(tex.texture, pos.x, pos.y, hitboxW, hitboxH);
             }
         }
 
