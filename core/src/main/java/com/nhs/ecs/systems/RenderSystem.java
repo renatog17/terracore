@@ -51,14 +51,20 @@ public class RenderSystem {
 
                 anim.stateTime += delta;
 
-                boolean moving = vel != null && (vel.vx != 0 || vel.vy != 0);
-
                 TextureRegion frame;
 
-                if (moving) {
+                boolean isInAir = vel != null && Math.abs(vel.vy) > 0.1f;
+                boolean isMovingHorizontally = vel != null && Math.abs(vel.vx) > 0.1f;
+
+                if (isInAir) {
+                    // SPRITE DE PULO (posição 3)
+                    frame = anim.frames[3];
+                } else if (isMovingHorizontally) {
+                    // ANIMAÇÃO DE CORRIDA (frames 1 e 2)
                     int frameIndex = 1 + (int)(anim.stateTime / anim.frameTime) % 2;
                     frame = anim.frames[frameIndex];
                 } else {
+                    // IDLE (frame 0)
                     frame = anim.frames[0];
                 }
 
@@ -73,9 +79,8 @@ public class RenderSystem {
                 float drawX = pos.x + (hitboxW - drawW) / 2f;
                 float drawY = pos.y;
 
-                // ===== DIREÇÃO (CORRIGIDO: usa DirectionComponent) =====
+                // ===== DIREÇÃO =====
                 DirectionComponent dir = em.getComponent(id, DirectionComponent.class);
-
                 boolean flipX = dir != null && !dir.facingRight;
 
                 if (flipX) {

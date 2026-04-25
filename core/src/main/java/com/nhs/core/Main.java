@@ -5,7 +5,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -13,11 +12,22 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.nhs.ecs.Entity;
 import com.nhs.ecs.EntityManager;
-import com.nhs.ecs.components.*;
+import com.nhs.ecs.components.AnimationComponent;
+import com.nhs.ecs.components.DirectionComponent;
+import com.nhs.ecs.components.EnemyComponent;
+import com.nhs.ecs.components.GroundedComponent;
+import com.nhs.ecs.components.GravityComponent;
+import com.nhs.ecs.components.ItemComponent;
+import com.nhs.ecs.components.PlayerComponent;
+import com.nhs.ecs.components.PositionComponent;
+import com.nhs.ecs.components.SizeComponent;
+import com.nhs.ecs.components.TextureComponent;
+import com.nhs.ecs.components.VelocityComponent;
 import com.nhs.ecs.systems.CollisionSystem;
 import com.nhs.ecs.systems.PhysicsSystem;
 import com.nhs.ecs.systems.PlayerInputSystem;
 import com.nhs.ecs.systems.RenderSystem;
+import com.nhs.world.World;
 
 public class Main extends ApplicationAdapter {
 
@@ -25,14 +35,13 @@ public class Main extends ApplicationAdapter {
 
     private Texture enemyTexture;
     private Texture itemTexture;
-    private Texture dirt;
-    private Texture grass;
 
     private Texture playerIdleTex;
     private Texture playerWalk1Tex;
     private Texture playerWalk2Tex;
+    private Texture playerJumpTex;
 
-    private TextureRegion[] playerFrames = new TextureRegion[3];
+    private TextureRegion[] playerFrames = new TextureRegion[4];
 
     private OrthographicCamera camera;
     private Viewport viewport;
@@ -43,12 +52,13 @@ public class Main extends ApplicationAdapter {
     private PhysicsSystem physicsSystem;
     private CollisionSystem collisionSystem;
 
+    private World world;
+
     private int playerId;
 
-    private final int TILE_SIZE = 32;
+    private final int TILE_SIZE = 16;
     private final int WORLD_WIDTH = 100;
     private final int WORLD_HEIGHT = 100;
-    private int[][] world;
 
     @Override
     public void create() {
@@ -56,44 +66,42 @@ public class Main extends ApplicationAdapter {
         batch = new SpriteBatch();
 
         // ===== PLAYER SPRITES =====
-        playerIdleTex = new Texture("player_default_teste.png");
+        playerIdleTex = new Texture("player_default.png");
         playerWalk1Tex = new Texture("player_walk1.png");
         playerWalk2Tex = new Texture("player_walk2.png");
+        playerJumpTex = new Texture("player_jump.png");
 
         playerFrames[0] = new TextureRegion(playerIdleTex);
         playerFrames[1] = new TextureRegion(playerWalk1Tex);
         playerFrames[2] = new TextureRegion(playerWalk2Tex);
+        playerFrames[3] = new TextureRegion(playerJumpTex);
 
         // ===== OUTRAS TEXTURAS =====
-        enemyTexture = createTexture(Color.BLUE);
-        itemTexture = createTexture(Color.YELLOW);
-        dirt = createTexture(new Color(0.55f, 0.27f, 0.07f, 1f));
-        grass = createTexture(new Color(0.3f, 0.8f, 0.3f, 1f));
+        enemyTexture = createSolidTexture(0f, 0f, 1f, 1f);
+        itemTexture = createSolidTexture(1f, 1f, 0f, 1f);
 
         // ===== CAMERA =====
         camera = new OrthographicCamera();
         viewport = new ExtendViewport(800, 600, camera);
         viewport.apply();
 
-        // ===== MUNDO =====
-        world = new int[WORLD_WIDTH][WORLD_HEIGHT];
-        generateWorld();
+        // ===== WORLD =====
+        world = new World(WORLD_WIDTH, WORLD_HEIGHT, TILE_SIZE);
 
         // ===== ECS =====
         em = new EntityManager();
 
         playerInputSystem = new PlayerInputSystem(em);
         renderSystem = new RenderSystem(em, batch, camera);
-
         physicsSystem = new PhysicsSystem(em);
-        collisionSystem = new CollisionSystem(em, world, TILE_SIZE);
+        collisionSystem = new CollisionSystem(em, world.getTiles(), TILE_SIZE);
 
         createEntities();
     }
 
-    private Texture createTexture(Color color) {
-        Pixmap map = new Pixmap(32, 32, Pixmap.Format.RGBA8888);
-        map.setColor(color);
+    private Texture createSolidTexture(float r, float g, float b, float a) {
+        Pixmap map = new Pixmap(TILE_SIZE, TILE_SIZE, Pixmap.Format.RGBA8888);
+        map.setColor(r, g, b, a);
         map.fill();
         Texture tex = new Texture(map);
         map.dispose();
@@ -107,8 +115,8 @@ public class Main extends ApplicationAdapter {
 
         em.addComponent(player, new SizeComponent(1.5f * TILE_SIZE, 3f * TILE_SIZE));
 
-        float x = 10 * TILE_SIZE;
-        float y = 41 * TILE_SIZE;
+        float x = 30 * TILE_SIZE;
+        float y = 51 * TILE_SIZE;
 
         em.addComponent(player, new PositionComponent(x, y));
         em.addComponent(player, new VelocityComponent());
@@ -130,54 +138,25 @@ public class Main extends ApplicationAdapter {
         em.addComponent(item, new ItemComponent("Coin"));
     }
 
-    private void generateWorld() {
-
-        int baseHeight = 40;
-        int currentHeight = baseHeight;
-
-        for (int x = 0; x < WORLD_WIDTH; x++) {
-
-            int variation = (int)(Math.random() * 3) - 1;
-            currentHeight += variation;
-
-            if (currentHeight < 30) currentHeight = 30;
-            if (currentHeight > 50) currentHeight = 50;
-
-            for (int y = 0; y < WORLD_HEIGHT; y++) {
-
-                if (y < currentHeight) {
-                    world[x][y] = 1;
-                } else if (y == currentHeight) {
-                    world[x][y] = 2;
-                }
-            }
-        }
-    }
-
     @Override
     public void render() {
 
-        float delta = Gdx.graphics.getDeltaTime();
+        float delta = Math.min(Gdx.graphics.getDeltaTime(), 1f / 30f);
 
-        // ===== ECS PIPELINE CORRETO =====
-
+        // ===== ECS =====
         playerInputSystem.update();
         physicsSystem.update(delta);
         collisionSystem.update(delta);
-        renderSystem.render();    // input
 
         // ===== CAMERA =====
         PositionComponent playerPos = em.getComponent(playerId, PositionComponent.class);
         if (playerPos == null) return;
 
-        float worldWidthPixels = WORLD_WIDTH * TILE_SIZE;
-        float worldHeightPixels = WORLD_HEIGHT * TILE_SIZE;
-
         float halfW = viewport.getWorldWidth() / 2f;
         float halfH = viewport.getWorldHeight() / 2f;
 
-        float camX = Math.max(halfW, Math.min(playerPos.x, worldWidthPixels - halfW));
-        float camY = Math.max(halfH, Math.min(playerPos.y, worldHeightPixels - halfH));
+        float camX = Math.max(halfW, Math.min(playerPos.x, world.getWidthPixels() - halfW));
+        float camY = Math.max(halfH, Math.min(playerPos.y, world.getHeightPixels() - halfH));
 
         camera.position.set(camX, camY, 0);
         camera.update();
@@ -186,24 +165,11 @@ public class Main extends ApplicationAdapter {
         Gdx.gl.glClearColor(0.5f, 0.7f, 1f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // ===== WORLD =====
         batch.setProjectionMatrix(camera.combined);
 
+        // ===== WORLD =====
         batch.begin();
-
-        for (int x = 0; x < WORLD_WIDTH; x++) {
-            for (int y = 0; y < WORLD_HEIGHT; y++) {
-
-                float drawX = x * TILE_SIZE;
-                float drawY = y * TILE_SIZE;
-
-                int tile = world[x][y];
-
-                if (tile == 1) batch.draw(dirt, drawX, drawY);
-                else if (tile == 2) batch.draw(grass, drawX, drawY);
-            }
-        }
-
+        world.render(batch);
         batch.end();
 
         // ===== ENTITIES =====
@@ -222,10 +188,11 @@ public class Main extends ApplicationAdapter {
         playerIdleTex.dispose();
         playerWalk1Tex.dispose();
         playerWalk2Tex.dispose();
+        playerJumpTex.dispose();
 
         enemyTexture.dispose();
         itemTexture.dispose();
-        dirt.dispose();
-        grass.dispose();
+
+        world.dispose();
     }
 }
