@@ -56,7 +56,7 @@ public class Main extends ApplicationAdapter {
 
     private int playerId;
 
-    private final int TILE_SIZE = 16;
+    private final int TILE_SIZE = 20;
     private final int WORLD_WIDTH = 100;
     private final int WORLD_HEIGHT = 100;
 

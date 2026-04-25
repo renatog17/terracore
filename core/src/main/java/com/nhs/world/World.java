@@ -16,30 +16,24 @@ public class World {
     private final TextureRegion[] dirtTiles = new TextureRegion[3];
 
     // ===== EDGES =====
-    private final Texture grassTTexture;
     private final TextureRegion grassT;
-
-    private final Texture grassBTexture;
     private final TextureRegion grassB;
-
-    private final Texture grassLTexture;
     private final TextureRegion grassL;
-
-    private final Texture grassRTexture;
     private final TextureRegion grassR;
 
-    // ===== CORNERS =====
-    private final Texture grassTRTexture;
+    // ===== OUTER CORNERS =====
     private final TextureRegion grassTR;
-
-    private final Texture grassTLTexture;
     private final TextureRegion grassTL;
-
-    private final Texture grassBRTexture;
     private final TextureRegion grassBR;
-
-    private final Texture grassBLTexture;
     private final TextureRegion grassBL;
+
+    // ===== INNER CORNERS =====
+    private final TextureRegion grassInnerTR;
+    private final TextureRegion grassInnerTL;
+    private final TextureRegion grassInnerBR;
+    private final TextureRegion grassInnerBL;
+
+    private final Texture[] allTextures; // facilitar dispose
 
     public World(int width, int height, int tileSize) {
         this.width = width;
@@ -57,31 +51,44 @@ public class World {
             dirtTiles[i] = new TextureRegion(dirtTextures[i]);
         }
 
-        // ===== EDGES =====
-        grassTTexture = new Texture("grass_t.png");
-        grassT = new TextureRegion(grassTTexture);
+        // ===== LOAD =====
+        Texture t, b, l, r;
+        Texture tr, tl, br, bl;
+        Texture itr, itl, ibr, ibl;
 
-        grassBTexture = new Texture("grass_b.png");
-        grassB = new TextureRegion(grassBTexture);
+        t = new Texture("grass_t.png");
+        b = new Texture("grass_b.png");
+        l = new Texture("grass_l.png");
+        r = new Texture("grass_r.png");
 
-        grassLTexture = new Texture("grass_l.png");
-        grassL = new TextureRegion(grassLTexture);
+        tr = new Texture("grass_corner_t_r.png");
+        tl = new Texture("grass_corner_t_l.png");
+        br = new Texture("grass_corner_b_r.png");
+        bl = new Texture("grass_corner_b_l.png");
 
-        grassRTexture = new Texture("grass_r.png");
-        grassR = new TextureRegion(grassRTexture);
+        itr = new Texture("grass_inner_t_r.png");
+        itl = new Texture("grass_inner_t_l.png");
+        ibr = new Texture("grass_inner_b_r.png");
+        ibl = new Texture("grass_inner_b_l.png");
 
-        // ===== CORNERS =====
-        grassTRTexture = new Texture("grass_corner_t_r.png");
-        grassTR = new TextureRegion(grassTRTexture);
+        grassT = new TextureRegion(t);
+        grassB = new TextureRegion(b);
+        grassL = new TextureRegion(l);
+        grassR = new TextureRegion(r);
 
-        grassTLTexture = new Texture("grass_corner_t_l.png");
-        grassTL = new TextureRegion(grassTLTexture);
+        grassTR = new TextureRegion(tr);
+        grassTL = new TextureRegion(tl);
+        grassBR = new TextureRegion(br);
+        grassBL = new TextureRegion(bl);
 
-        grassBRTexture = new Texture("grass_corner_b_r.png");
-        grassBR = new TextureRegion(grassBRTexture);
+        grassInnerTR = new TextureRegion(itr);
+        grassInnerTL = new TextureRegion(itl);
+        grassInnerBR = new TextureRegion(ibr);
+        grassInnerBL = new TextureRegion(ibl);
 
-        grassBLTexture = new Texture("grass_corner_b_l.png");
-        grassBL = new TextureRegion(grassBLTexture);
+        allTextures = new Texture[] {
+            t,b,l,r,tr,tl,br,bl,itr,itl,ibr,ibl
+        };
 
         generateWorld();
     }
@@ -91,11 +98,10 @@ public class World {
         int currentHeight = baseHeight;
 
         for (int x = 0; x < width; x++) {
-            int variation = (int) (Math.random() * 3) - 1;
+            int variation = (int)(Math.random() * 3) - 1;
             currentHeight += variation;
 
-            if (currentHeight < 30) currentHeight = 30;
-            if (currentHeight > 50) currentHeight = 50;
+            currentHeight = Math.max(30, Math.min(50, currentHeight));
 
             for (int y = 0; y < height; y++) {
                 if (y < currentHeight) {
@@ -115,8 +121,8 @@ public class World {
                 float drawX = x * tileSize;
                 float drawY = y * tileSize;
 
-                int variation = getTileVariation(x, y);
-                batch.draw(dirtTiles[variation], drawX, drawY, tileSize, tileSize);
+                int v = getTileVariation(x, y);
+                batch.draw(dirtTiles[v], drawX, drawY, tileSize, tileSize);
             }
         }
 
@@ -125,56 +131,73 @@ public class World {
             for (int y = 0; y < height; y++) {
                 if (tiles[x][y] != 1) continue;
 
-                float drawX = x * tileSize;
-                float drawY = y * tileSize;
-
-                drawGrass(batch, x, y, drawX, drawY);
+                drawGrass(batch, x, y);
             }
         }
     }
 
-    private void drawGrass(SpriteBatch batch, int x, int y, float drawX, float drawY) {
+    private void drawGrass(SpriteBatch batch, int x, int y) {
+
+        float drawX = x * tileSize;
+        float drawY = y * tileSize;
 
         final float thickness = 6f;
-        final float overlap = thickness / 2f;
+        final float o = thickness / 2f;
 
         boolean top = !hasBlock(x, y + 1);
         boolean bottom = !hasBlock(x, y - 1);
         boolean left = !hasBlock(x - 1, y);
         boolean right = !hasBlock(x + 1, y);
 
-        // ===== EDGES =====
+        // ===== EDGES (corrigido: sem extrapolar) =====
         if (top) {
-            batch.draw(grassT, drawX - overlap, drawY + tileSize - overlap, tileSize + overlap * 2f, thickness);
+            batch.draw(grassT, drawX, drawY + tileSize - o, tileSize, thickness);
         }
 
         if (bottom) {
-            batch.draw(grassB, drawX - overlap, drawY - overlap, tileSize + overlap * 2f, thickness);
+            batch.draw(grassB, drawX, drawY - o, tileSize, thickness);
         }
 
         if (left) {
-            batch.draw(grassL, drawX - overlap, drawY - overlap, thickness, tileSize + overlap * 2f);
+            batch.draw(grassL, drawX - o, drawY, thickness, tileSize);
         }
 
         if (right) {
-            batch.draw(grassR, drawX + tileSize - overlap, drawY - overlap, thickness, tileSize + overlap * 2f);
+            batch.draw(grassR, drawX + tileSize - o, drawY, thickness, tileSize);
         }
 
-        // ===== CORNERS (render depois) =====
+        // ===== OUTER CORNERS =====
         if (top && right) {
-            batch.draw(grassTR, drawX + tileSize - overlap, drawY + tileSize - overlap, thickness, thickness);
+            batch.draw(grassTR, drawX + tileSize - o, drawY + tileSize - o, thickness, thickness);
         }
 
         if (top && left) {
-            batch.draw(grassTL, drawX - overlap, drawY + tileSize - overlap, thickness, thickness);
+            batch.draw(grassTL, drawX - o, drawY + tileSize - o, thickness, thickness);
         }
 
         if (bottom && right) {
-            batch.draw(grassBR, drawX + tileSize - overlap, drawY - overlap, thickness, thickness);
+            batch.draw(grassBR, drawX + tileSize - o, drawY - o, thickness, thickness);
         }
 
         if (bottom && left) {
-            batch.draw(grassBL, drawX - overlap, drawY - overlap, thickness, thickness);
+            batch.draw(grassBL, drawX - o, drawY - o, thickness, thickness);
+        }
+
+        // ===== INNER CORNERS =====
+        if (!top && !left && !hasBlock(x - 1, y + 1)) {
+            batch.draw(grassInnerTL, drawX - o, drawY + tileSize - o, thickness, thickness);
+        }
+
+        if (!top && !right && !hasBlock(x + 1, y + 1)) {
+            batch.draw(grassInnerTR, drawX + tileSize - o, drawY + tileSize - o, thickness, thickness);
+        }
+
+        if (!bottom && !left && !hasBlock(x - 1, y - 1)) {
+            batch.draw(grassInnerBL, drawX - o, drawY - o, thickness, thickness);
+        }
+
+        if (!bottom && !right && !hasBlock(x + 1, y - 1)) {
+            batch.draw(grassInnerBR, drawX + tileSize - o, drawY - o, thickness, thickness);
         }
     }
 
@@ -203,18 +226,7 @@ public class World {
     }
 
     public void dispose() {
-        for (Texture t : dirtTextures) {
-            t.dispose();
-        }
-
-        grassTTexture.dispose();
-        grassBTexture.dispose();
-        grassLTexture.dispose();
-        grassRTexture.dispose();
-
-        grassTRTexture.dispose();
-        grassTLTexture.dispose();
-        grassBRTexture.dispose();
-        grassBLTexture.dispose();
+        for (Texture t : dirtTextures) t.dispose();
+        for (Texture t : allTextures) t.dispose();
     }
 }
